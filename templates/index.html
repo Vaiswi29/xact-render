@@ -5,71 +5,134 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>xAct Chat</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 800px; margin: 30px auto; padding: 0 16px; }
-    #chat { border: 1px solid #ddd; padding: 12px; height: 420px; overflow-y: auto; border-radius: 10px; }
+    body { font-family: system-ui, -apple-system, Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 0 16px; }
+    #chat { border: 1px solid #e5e5e5; padding: 14px; height: 460px; overflow-y: auto; border-radius: 12px; background: #fff; }
     .msg { margin: 10px 0; }
-    .you { font-weight: 600; }
-    .bot { font-weight: 600; }
-    #row { display: flex; gap: 8px; margin-top: 12px; }
-    input { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid #ccc; }
-    button { padding: 10px 14px; border-radius: 10px; border: 1px solid #ccc; cursor: pointer; }
-    .small { color: #777; font-size: 12px; margin-top: 6px; }
+    .tag { font-weight: 700; display: inline-block; width: 48px; }
+    .you { color: #111; }
+    .bot { color: #111; }
+    .bubble {
+      display: inline-block;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid #eee;
+      background: #fafafa;
+      max-width: calc(100% - 60px);
+      vertical-align: top;
+      white-space: pre-wrap; /* preserves newlines */
+      word-wrap: break-word;
+    }
+    .bubble.you { background: #f3f6ff; border-color: #e6ecff; }
+    .bubble.bot { background: #fafafa; }
+    #row { display: flex; gap: 10px; margin-top: 12px; }
+    input { flex: 1; padding: 12px; border-radius: 12px; border: 1px solid #ddd; }
+    button { padding: 12px 16px; border-radius: 12px; border: 1px solid #ddd; cursor: pointer; background: #fff; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .small { color: #777; font-size: 12px; margin-top: 8px; }
+    .err { color: #b00020; }
   </style>
 </head>
+
 <body>
   <h2>xAct Chat</h2>
   <div id="chat"></div>
 
   <div id="row">
-    <input id="q" placeholder="Ask a question about xAct..." />
+    <input id="q" placeholder="Ask a question about xAct..." autocomplete="off" />
     <button id="send">Send</button>
   </div>
-  <div class="small">This chat calls your Flask /ask endpoint on Render.</div>
+
+  <div class="small">
+    Calls <code>/ask</code> on the same site. If free-tier is cold-starting, the first answer can take a bit.
+  </div>
 
 <script>
   const chat = document.getElementById("chat");
   const input = document.getElementById("q");
   const sendBtn = document.getElementById("send");
 
-  function add(role, text) {
-    const div = document.createElement("div");
-    div.className = "msg";
-    div.innerHTML = `<span class="${role === 'You' ? 'you' : 'bot'}">${role}:</span> ${text}`;
-    chat.appendChild(div);
+  function addMessage(role, text, isError=false) {
+    const wrap = document.createElement("div");
+    wrap.className = "msg";
+
+    const tag = document.createElement("span");
+    tag.className = `tag ${role === "You" ? "you" : "bot"}`;
+    tag.textContent = role + ":";
+
+    const bubble = document.createElement("div");
+    bubble.className = `bubble ${role === "You" ? "you" : "bot"} ${isError ? "err" : ""}`;
+    bubble.textContent = text; // safe (no HTML injection)
+
+    wrap.appendChild(tag);
+    wrap.appendChild(bubble);
+
+    chat.appendChild(wrap);
     chat.scrollTop = chat.scrollHeight;
+    return bubble; // so we can update it ("thinking..." -> answer)
+  }
+
+  function fetchWithTimeout(url, options, ms=180000) { // 3 min
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), ms);
+    return fetch(url, { ...options, signal: controller.signal })
+      .finally(() => clearTimeout(id));
   }
 
   async function send() {
     const question = input.value.trim();
     if (!question) return;
-    add("You", question);
+
+    // UI
+    addMessage("You", question);
     input.value = "";
-    add("Bot", "<i>thinking...</i>");
+    sendBtn.disabled = true;
+    const thinkingBubble = addMessage("Bot", "thinking...");
 
     try {
-      const res = await fetch("/ask", {
+      const res = await fetchWithTimeout("/ask", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({question})
-      });
-      const data = await res.json();
+        body: JSON.stringify({ question })
+      }, 180000);
 
-      // remove "thinking..."
-      chat.removeChild(chat.lastChild);
+      // If server returns HTML on error, this prevents .json() from throwing silently
+      const contentType = res.headers.get("content-type") || "";
+      let payload = null;
+
+      if (contentType.includes("application/json")) {
+        payload = await res.json();
+      } else {
+        const raw = await res.text();
+        payload = { error: raw.slice(0, 300) };
+      }
 
       if (!res.ok) {
-        add("Bot", `Error: ${data.error || "unknown"}`);
+        const msg = payload?.error || `HTTP ${res.status}`;
+        thinkingBubble.textContent = `Error: ${msg}`;
+        thinkingBubble.classList.add("err");
       } else {
-        add("Bot", data.answer);
+        thinkingBubble.textContent = payload.answer || "(No answer returned.)";
       }
+
     } catch (e) {
-      chat.removeChild(chat.lastChild);
-      add("Bot", "Error: could not reach server.");
+      if (e.name === "AbortError") {
+        thinkingBubble.textContent = "Server took too long (timeout). Try again (free tier cold starts can be slow).";
+      } else {
+        thinkingBubble.textContent = `Error: could not reach server. (${e.message || e})`;
+      }
+      thinkingBubble.classList.add("err");
+    } finally {
+      sendBtn.disabled = false;
+      input.focus();
+      chat.scrollTop = chat.scrollHeight;
     }
   }
 
   sendBtn.addEventListener("click", send);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+
+  // small greeting
+  addMessage("Bot", "Hi! Ask me anything about xAct 🙂");
 </script>
 </body>
 </html>
