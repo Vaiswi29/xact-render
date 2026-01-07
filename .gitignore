@@ -1,0 +1,38 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# ===== Virtual environments =====
+.venv/
+venv/
+env/
+
+# ===== macOS =====
+.DS_Store
+
+# ===== Jupyter =====
+.ipynb_checkpoints/
+
+# ===== Logs =====
+*.log
+
+# ===== Temporary files =====
+*.tmp
+*.swp
+
+# ===== Model artifacts (local only) =====
+xact_finetuned_model/
+xact_rag_hybrid_model/
+xact_rag_hybrid_model_partial/
+
+# ===== Cache / downloads =====
+.cache/
+.huggingface/
+torch_cache/
+
+
+xact_finetuned_model.zip
+xact_finetuned_model/

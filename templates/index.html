@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>xAct Chat</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 30px auto; padding: 0 16px; }
+    #chat { border: 1px solid #ddd; padding: 12px; height: 420px; overflow-y: auto; border-radius: 10px; }
+    .msg { margin: 10px 0; }
+    .you { font-weight: 600; }
+    .bot { font-weight: 600; }
+    #row { display: flex; gap: 8px; margin-top: 12px; }
+    input { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid #ccc; }
+    button { padding: 10px 14px; border-radius: 10px; border: 1px solid #ccc; cursor: pointer; }
+    .small { color: #777; font-size: 12px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <h2>xAct Chat</h2>
+  <div id="chat"></div>
+
+  <div id="row">
+    <input id="q" placeholder="Ask a question about xAct..." />
+    <button id="send">Send</button>
+  </div>
+  <div class="small">This chat calls your Flask /ask endpoint on Render.</div>
+
+<script>
+  const chat = document.getElementById("chat");
+  const input = document.getElementById("q");
+  const sendBtn = document.getElementById("send");
+
+  function add(role, text) {
+    const div = document.createElement("div");
+    div.className = "msg";
+    div.innerHTML = `<span class="${role === 'You' ? 'you' : 'bot'}">${role}:</span> ${text}`;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  async function send() {
+    const question = input.value.trim();
+    if (!question) return;
+    add("You", question);
+    input.value = "";
+    add("Bot", "<i>thinking...</i>");
+
+    try {
+      const res = await fetch("/ask", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({question})
+      });
+      const data = await res.json();
+
+      // remove "thinking..."
+      chat.removeChild(chat.lastChild);
+
+      if (!res.ok) {
+        add("Bot", `Error: ${data.error || "unknown"}`);
+      } else {
+        add("Bot", data.answer);
+      }
+    } catch (e) {
+      chat.removeChild(chat.lastChild);
+      add("Bot", "Error: could not reach server.");
+    }
+  }
+
+  sendBtn.addEventListener("click", send);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+</script>
+</body>
+</html>
