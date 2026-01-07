@@ -1,8 +1,9 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 flask
 gunicorn
 numpy
 scikit-learn
 sentence-transformers
 transformers
-torch
+torch==2.4.1
 gdown
